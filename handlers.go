@@ -28,3 +28,7 @@ func onConnect(s *discordgo.Session, c *discordgo.Connect) {
 func onDisconnect(s *discordgo.Session, d *discordgo.Disconnect) {
 	slog.Warn("Bot disconnected from Discord gateway! Reconnecting automatically...")
 }
+
+func guildScheduledEventCreate(s *discordgo.Session, e *discordgo.GuildScheduledEventCreate) {
+	slog.Info("New event detected", "Name", e.Name, "StartTime", e.ScheduledStartTime, "GuildID", e.GuildID)
+}
