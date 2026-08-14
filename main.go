@@ -39,6 +39,7 @@ func main() {
 
 	//Load JSON config to set up notification channels from before shutdown
 	LoadConfig()
+	LoadBannedDomains()
 
 	slog.Info("Starting Discord Bot Session...")
 
@@ -56,7 +57,10 @@ func main() {
 	discordSession.AddHandler(guildScheduledEventCreate)
 
 
-	discordSession.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsGuilds | discordgo.IntentsGuildScheduledEvents
+	discordSession.Identify.Intents = discordgo.IntentsGuildMessages |
+									  discordgo.IntentsGuilds | 
+									  discordgo.IntentsMessageContent |
+									  discordgo.IntentsGuildScheduledEvents
 	// Set up bot Intents
 	 
 

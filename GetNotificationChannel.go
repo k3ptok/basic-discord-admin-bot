@@ -10,17 +10,17 @@ import (
 // Note: In production, save this to a database so it survives restarts.
 var (
 	configMu       sync.RWMutex
-	customChannels = make(map[string]string)
+ 	botConfig = make(map[string]ServerSettings)
 )
 
 // Gets custom channel or falls back to server default
 func findNotificationChannel(s *discordgo.Session, guildID string) string{
 	configMu.RLock()
-	customID, exists := customChannels[guildID]
+	settings, exists := botConfig[guildID]
 	configMu.RUnlock()
 
-	if exists && customID != "" {
-		return customID
+	if exists && settings.ChannelID != "" {
+		return settings.ChannelID
 	}
 
 	guild, err := s.Guild(guildID)
