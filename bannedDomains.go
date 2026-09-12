@@ -2,16 +2,16 @@ package main
 
 import (
 	"os"
-	
-	"sync"
-	"log/slog"
+
 	"bufio"
+	"log/slog"
 	"strings"
+	"sync"
 )
 
 var (
 	bannedDomains = make(map[string]bool)
-	domainsMu       sync.RWMutex
+	domainsMu     sync.RWMutex
 )
 
 func LoadBannedDomains() {

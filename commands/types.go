@@ -1,26 +1,28 @@
 package commands
 
 import (
+	"fmt"
 	"github.com/bwmarrin/discordgo"
-	"github.com/k3ptok/context/cmdctx"
+	"github.com/k3ptok/BasicDiscordBot/cmdctx"
+	
 )
 
-type SubCommandHandler func(ctx *Context) error
+type SubCommandHandler func(ctx *cmdctx.Context) error
 
 type Command struct {
 	Definition *discordgo.ApplicationCommand
 	SubCommands map[string]SubCommandHandler
 }
 // Route incoming interactions to appropriate subcommand
-func (c *Command) Handle(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	options := i.ApplicationCommandData().Options
-	if len(options) == 0 {
-		return
+func (c *Command) Execute(ctx *cmdctx.Context) error {
+	if len(ctx.Data.Options) == 0 {
+		return fmt.Errorf("No command provided")
 	}
 
-	//determine subcommand name
-	subcommandName := options[0].Name
-	if handler, exists := c.SubCommands[subcommandName]; exists {
-		handler(s, i)
+	subName := ctx.Data.Options[0].Name
+	if handler, ok := c.SubCommands[subName]; ok {
+		return handler(ctx)
 	}
+
+	return fmt.Errorf("Unknown subcommand: %s", subName)
 }
