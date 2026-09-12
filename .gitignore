@@ -1,3 +1,9 @@
+logs/
+*.log
 .env
-bot.log
-config.json
+.env.*
+!.env.example
+bin/
+*.exe
+*-main
+dist/

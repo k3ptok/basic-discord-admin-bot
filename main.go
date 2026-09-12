@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -9,26 +8,28 @@ import (
 	"log/slog"
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 func main() {
 
-	//Create log file
-	logFile, err := os.OpenFile("bot.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		fmt.Println("failed to create log file", err)
-		return
+	// Configure the rotating log file inside the "logs" directory
+	logRotator := &lumberjack.Logger{
+		Filename:   "logs/bot.log", // Puts bot.log and all rotated backups inside /logs
+		MaxSize:    10,             // Megabytes before rotating
+		MaxBackups: 20,              // Number of old log files to keep
+		MaxAge:     180,             // Number of days to keep old files
+		Compress:   true,           // Compresses old logs to save disk space
 	}
-	defer logFile.Close()
 
-	//Configure logging to write to both the console (Stdout) AND the logfile
-	multiWriter := io.MultiWriter(os.Stdout, logFile)
+	// Configure logging to write to both the console (Stdout) AND the log rotator
+	multiWriter := io.MultiWriter(os.Stdout, logRotator)
 	logger := slog.New(slog.NewTextHandler(multiWriter, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 	slog.SetDefault(logger)
 
-	err = godotenv.Load()
+	err := godotenv.Load()
   	if err != nil {
     	slog.Error("Failed to load godotenv", "error", err)
   	}
@@ -38,7 +39,6 @@ func main() {
 	//and your desired discord server
 
 	//Load JSON config to set up notification channels from before shutdown
-	LoadConfig()
 	LoadBannedDomains()
 
 	slog.Info("Starting Discord Bot Session...")
@@ -50,11 +50,7 @@ func main() {
 	}
 
 	//Register handlers
-	discordSession.AddHandler(InteractionHandler)
-	discordSession.AddHandler(onConnect)
-	discordSession.AddHandler(onDisconnect)
-	discordSession.AddHandler(onMessageCreate)
-	discordSession.AddHandler(guildScheduledEventCreate)
+	
 
 
 	discordSession.Identify.Intents = discordgo.IntentsGuildMessages |
@@ -73,12 +69,6 @@ func main() {
 		slog.Info("Closing Discord Connection...")
 		discordSession.Close()
 	}()
-
-	// Register name spaced commands
-	RegisterNamespacedCommand(discordSession)
-
-	// Start global reminder scheduler
-	StartGlobalReminderScheduler(discordSession)
 
 	slog.Info("Discord Bot is currently running. Press CTRL + C to terminate session.")
 	
