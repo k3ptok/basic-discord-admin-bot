@@ -7,3 +7,10 @@ bin/
 *.exe
 *-main
 dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out

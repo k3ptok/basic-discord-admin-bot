@@ -5,19 +5,21 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-
+	"time"
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
-
 	"github.com/k3ptok/BasicDiscordBot/cmdctx"
 	"github.com/k3ptok/BasicDiscordBot/commands"
 	"github.com/k3ptok/BasicDiscordBot/logger"
+	"github.com/k3ptok/BasicDiscordBot/automod"
 )
 
 var allCommands = []commands.Command{
 	commands.Admin,
 	commands.User,
 }
+
+const DiscordScamFeedURL = "https://raw.githubusercontent.com/Phishing-Database/Phishing.Database/master/phishing-domains-ACTIVE.txt"
 
 func main() {
 	log := logger.InitLogger()
@@ -60,6 +62,16 @@ func main() {
 		
 	})
 
+	autoMod := automod.NewManager(log)
+	domainStore := automod.NewDomainStore(log)
+	domainStore.StartAutoUpdater("banned-domains.txt", DiscordScamFeedURL, 6*time.Hour)
+
+	RegisterRules(autoMod, domainStore)
+
+	discordSession.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
+	autoMod.ProcessMessage(s, m)
+	})
+
 	discordSession.Identify.Intents = discordgo.IntentsGuildMessages |
 		discordgo.IntentsGuilds |
 		discordgo.IntentsMessageContent |
@@ -89,7 +101,7 @@ func main() {
 	} else {
 		log.Info("Successfully cleared legacy global commands")
 }
-	//Overwrite currently loaded LOCAL commands on server to audit old/deleted commands
+	//Overwrite currently loaded LOCAL commands on server to remove old/deleted commands
 	registeredCmds, err := discordSession.ApplicationCommandBulkOverwrite(appID, guildID, definitions)
 	if err != nil {
 		log.Error("Failed to bulk overwrite commands", slog.Any("error", err))
