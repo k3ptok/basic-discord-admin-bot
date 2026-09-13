@@ -15,14 +15,8 @@ type Command struct {
 }
 // Route incoming interactions to appropriate subcommand
 func (c *Command) Execute(ctx *cmdctx.Context) error {
-	if len(ctx.Data.Options) == 0 {
-		return fmt.Errorf("No command provided")
-	}
-
-	subName := ctx.Data.Options[0].Name
-	if handler, ok := c.SubCommands[subName]; ok {
+	if handler, ok := c.SubCommands[ctx.Subcommand]; ok {
 		return handler(ctx)
 	}
-
-	return fmt.Errorf("Unknown subcommand: %s", subName)
+	return fmt.Errorf("unknown subcommand: %s", ctx.Subcommand)
 }

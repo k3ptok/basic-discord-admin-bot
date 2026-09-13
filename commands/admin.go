@@ -23,11 +23,17 @@ var Admin = Command{
 				Description:	"The target user",
 				Required:		true,
 			},
+			{
+				Type:			discordgo.ApplicationCommandOptionString,
+				Name:			"reason",
+				Description:	"Reason for kicking user",
+				Required:		false,
+			},
 		},
 	},
 	},
 	},
 	SubCommands: map[string]SubCommandHandler{
-		"kick": handleKick,
+		"kick": RequirePermissions(discordgo.PermissionKickMembers, handleKick),
 	},
 }

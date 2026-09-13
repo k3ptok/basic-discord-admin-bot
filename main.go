@@ -51,17 +51,13 @@ func main() {
 			return
 		}
 
-		ctx, ok := cmdctx.New(s, i, log)
-		if !ok {
-			return
-		}
-		if cmd, exists := commandMap[ctx.Data.Name]; !exists {
-			if err := cmd.Execute(ctx); err != nil {
-				log.Error("Error executing command", slog.Any("error", err))
-				return
+		if ctx, ok := cmdctx.New(s, i, log); ok {
+			if cmd, exists := commandMap[ctx.Data.Name]; exists {
+				commands.PanicWrapper(cmd, ctx)
 			}
+			log.Info("Received command interaction", slog.String("command", ctx.Data.Name))
 		}
-		log.Info("Received command interaction", slog.String("command", ctx.Data.Name))
+		
 	})
 
 	discordSession.Identify.Intents = discordgo.IntentsGuildMessages |
@@ -72,22 +68,34 @@ func main() {
 
 	err = discordSession.Open()
 	if err != nil {
-		slog.Error("Failed to open connection to Discord", "error", err)
+		log.Error("Failed to open connection to Discord", slog.Any("error", err))
 		return
 	}
 	defer func() {
-		slog.Info("Closing Discord Connection...")
+		log.Info("Closing Discord Connection...")
 		discordSession.Close()
 	}()
 
-	slog.Info("Registering slash commands...")
+	log.Info("Registering slash commands...")
+	//Load active commands into slice
+	var definitions []*discordgo.ApplicationCommand
 	for _, cmd := range allCommands {
-		_, err := discordSession.ApplicationCommandCreate(appID, guildID, cmd.Definition)
-		if err != nil {
-			slog.Error("Cannot create command", "command", "error", cmd.Definition.Name, err)
-		}
+		definitions = append(definitions, cmd.Definition)
 	}
-
+	//Clear any global commands I may have set
+	_, err = discordSession.ApplicationCommandBulkOverwrite(appID, "", []*discordgo.ApplicationCommand{})
+	if err != nil {
+		log.Error("Failed to clear global commands", slog.Any("error", err))
+	} else {
+		log.Info("Successfully cleared legacy global commands")
+}
+	//Overwrite currently loaded LOCAL commands on server to audit old/deleted commands
+	registeredCmds, err := discordSession.ApplicationCommandBulkOverwrite(appID, guildID, definitions)
+	if err != nil {
+		log.Error("Failed to bulk overwrite commands", slog.Any("error", err))
+	} else {
+		log.Info("Successfully synced slash commands", slog.Int("Count:", len(registeredCmds)))
+	}
 	slog.Info("Discord Bot is currently running. Press CTRL + C to terminate session.")
 
 	sc := make(chan os.Signal, 1)
