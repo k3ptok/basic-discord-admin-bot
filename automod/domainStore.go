@@ -53,9 +53,9 @@ func (ds *DomainStore) LoadFromReader(r io.Reader) error {
 		domain := fields[len(fields)-1]
 		newMap[strings.ToLower(domain)] = struct{}{}
 
+	}
 	if err := scanner.Err(); err != nil {
 		return err
-	}
 	}
 	//swap pointers
 	ds.mu.Lock()

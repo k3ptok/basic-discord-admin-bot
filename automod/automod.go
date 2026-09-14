@@ -92,9 +92,13 @@ func (m *Manager) isSpamming(msg *discordgo.MessageCreate) bool {
 }
 
 func (m *Manager) applyTimeout(s *discordgo.Session, msg *discordgo.MessageCreate, reason string) {
-	_ = s.ChannelMessageDelete(msg.ChannelID, msg.ID)
+	err := s.ChannelMessageDelete(msg.ChannelID, msg.ID)
+	if err != nil {
+		m.logger.Error("Failed to delete message after timeout", slog.Any("error", err))
+		return
+	}
 	until := time.Now().Add(10 * time.Minute)
-	err := s.GuildMemberTimeout(msg.GuildID, msg.Author.ID, &until)
+	err = s.GuildMemberTimeout(msg.GuildID, msg.Author.ID, &until)
 	if err != nil {
 		m.logger.Error("Failed to timeout offending user", slog.Any("error", err))
 		return
@@ -113,8 +117,12 @@ func (m *Manager) handleViolation(s *discordgo.Session, msg *discordgo.MessageCr
 	}
 
 	//temporary warning
-	warnMsg, _ := s.ChannelMessageSend(msg.ChannelID,
+	warnMsg, err := s.ChannelMessageSend(msg.ChannelID,
 	"⚠️ " + msg.Author.Mention() + " your message was removed for: **" + reason + "**")
+	if err != nil {
+		m.logger.Error("failed to create warnmsg in violation handler", slog.Any("error", err))
+		return
+	}
 
 	m.logger.Info("Automod action taken",
 		slog.String("user_id", msg.Author.ID),

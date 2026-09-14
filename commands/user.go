@@ -4,7 +4,8 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-var User = Command{
+func NewUserCommandStructure() Command {
+	return Command{
 	Definition: &discordgo.ApplicationCommand{
 		Name:        "user",
 		Description: "General user commands",
@@ -29,3 +30,4 @@ var User = Command{
 	},
 }
 
+}

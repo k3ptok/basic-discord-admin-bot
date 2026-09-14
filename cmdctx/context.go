@@ -3,6 +3,7 @@ package cmdctx
 import (
 	"log/slog"
 	"github.com/bwmarrin/discordgo"
+	"github.com/k3ptok/BasicDiscordBot/internal/database"
 	//"github.com/k3ptok/BasicDiscordBot/logger"
 )
 
@@ -11,13 +12,14 @@ type Context struct {
 	Interaction 	*discordgo.InteractionCreate
 	Data 		 	discordgo.ApplicationCommandInteractionData
 	Logger			*slog.Logger
+	DB 				*database.Queries
 	Subcommand		string
 	SubcommandGroup	string
 	optionsMap		map[string]*discordgo.ApplicationCommandInteractionDataOption
 }
 
 // New creates a wrapped context with option pre-parsing and scoped logging
-func New(s *discordgo.Session, i *discordgo.InteractionCreate, logger *slog.Logger) (*Context, bool) {
+func New(s *discordgo.Session, i *discordgo.InteractionCreate, logger *slog.Logger, db *database.Queries) (*Context, bool) {
 	data, ok := i.Data.(discordgo.ApplicationCommandInteractionData)
 	if !ok {
 		return nil, false
@@ -27,6 +29,7 @@ func New(s *discordgo.Session, i *discordgo.InteractionCreate, logger *slog.Logg
 		Session:		s,
 		Interaction:	i,
 		Data:			data,
+		DB:				db,
 		optionsMap:		make(map[string]*discordgo.ApplicationCommandInteractionDataOption),
 	}
 
@@ -41,11 +44,18 @@ func New(s *discordgo.Session, i *discordgo.InteractionCreate, logger *slog.Logg
     	executorUsername = i.User.Username
 	}
 
+	var executorID string
+	if i.Member != nil && i.Member.User != nil {
+    	executorID = i.Member.User.ID
+	} else if i.User != nil {
+    	executorID = i.User.ID
+	}
+
 	//Create scoped logger with interaction metadata
 	ctx.Logger = logger.With(
 		slog.String("command", data.Name),
 		slog.String("Subcommand", ctx.Subcommand),
-		slog.String("executor_id", i.Member.User.ID),
+		slog.String("executor_id", executorID),
 		slog.String("executor_name", executorUsername),
 		slog.String("guild_id", i.GuildID),
 	)
@@ -63,6 +73,7 @@ func (c *Context) parseOptions(options []*discordgo.ApplicationCommandInteractio
 			c.parseOptions(opt.Options)
 		default:
 			//Leaf parameters (String, User, Int, Bool, etc.)
+			c.optionsMap[opt.Name] = opt
 		}
 	}
 }

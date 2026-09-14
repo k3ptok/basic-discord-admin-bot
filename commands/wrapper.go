@@ -15,8 +15,8 @@ func RequirePermissions(permission int64, handler SubCommandHandler) SubCommandH
 		userPerms := ctx.Interaction.Member.Permissions
 
 		//check if user is an admin or has the permission
-		isAdmin := (userPerms & discordgo.PermissionAdministrator) != 0
-		hasPerm := (userPerms & permission) != 0
+		isAdmin := (userPerms & discordgo.PermissionAdministrator) == discordgo.PermissionAdministrator
+		hasPerm := (userPerms & permission) == permission
 
 		if !isAdmin && !hasPerm {
 			ctx.Logger.Warn("Unauthorized Command Attempt",
