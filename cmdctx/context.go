@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"github.com/bwmarrin/discordgo"
 	"github.com/k3ptok/BasicDiscordBot/internal/database"
-	//"github.com/k3ptok/BasicDiscordBot/logger"
+	"github.com/k3ptok/BasicDiscordBot/automod"
 )
 
 type Context struct {
@@ -12,6 +12,7 @@ type Context struct {
 	Interaction 	*discordgo.InteractionCreate
 	Data 		 	discordgo.ApplicationCommandInteractionData
 	Logger			*slog.Logger
+	ModLogger 		*automod.ModLogger
 	DB 				*database.Queries
 	Subcommand		string
 	SubcommandGroup	string
@@ -19,7 +20,7 @@ type Context struct {
 }
 
 // New creates a wrapped context with option pre-parsing and scoped logging
-func New(s *discordgo.Session, i *discordgo.InteractionCreate, logger *slog.Logger, db *database.Queries) (*Context, bool) {
+func New(s *discordgo.Session, i *discordgo.InteractionCreate, logger *slog.Logger, db *database.Queries, modLog *automod.ModLogger) (*Context, bool) {
 	data, ok := i.Data.(discordgo.ApplicationCommandInteractionData)
 	if !ok {
 		return nil, false
@@ -29,6 +30,7 @@ func New(s *discordgo.Session, i *discordgo.InteractionCreate, logger *slog.Logg
 		Session:		s,
 		Interaction:	i,
 		Data:			data,
+		ModLogger:		modLog,
 		DB:				db,
 		optionsMap:		make(map[string]*discordgo.ApplicationCommandInteractionDataOption),
 	}

@@ -1,21 +1,25 @@
 package main
 
 import (
+	"embed"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
-	"embed"
+
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
 	"github.com/k3ptok/BasicDiscordBot/automod"
 	"github.com/k3ptok/BasicDiscordBot/cmdctx"
 	"github.com/k3ptok/BasicDiscordBot/commands"
-	"github.com/k3ptok/BasicDiscordBot/logger"
 	"github.com/k3ptok/BasicDiscordBot/internal/database"
+	"github.com/k3ptok/BasicDiscordBot/leveling"
+	"github.com/k3ptok/BasicDiscordBot/logger"
+	
 )
 
+//go:embed sql/schema/*.sql
 var embedMigrations embed.FS
 
 const DiscordScamFeedURL = "https://raw.githubusercontent.com/Phishing-Database/Phishing.Database/master/phishing-domains-ACTIVE.txt"
@@ -41,17 +45,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	
 	db := database.InitDB(log, embedMigrations)
 	dbQueries := database.New(db)
 
-	autoMod := automod.NewManager(log)
+	xpManager := leveling.NewManager(dbQueries, log)
 	modLogger := automod.NewModLogger(log, dbQueries)
+	autoMod := automod.NewManager(log, modLogger)
 	domainStore := automod.NewDomainStore(log)
 	domainStore.StartAutoUpdater("banned-domains.txt", DiscordScamFeedURL, 6*time.Hour)
 
 	allCommands := []commands.Command{
 		commands.NewAdminCommandStructure(),
-		commands.NewUserCommandStructure(), 
+		//commands.NewUserCommandStructure(),
+		commands.NewPingCommand(),
+		commands.NewTagCommand(), 
 	}
 
 	commandMap := make(map[string]commands.Command)
@@ -59,13 +67,13 @@ func main() {
 		commandMap[cmd.Definition.Name] = cmd
 	}
 
-	RegisterRules(autoMod, domainStore, modLogger)
+	RegisterRules(autoMod, domainStore)
 	discordSession.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		if i.Type != discordgo.InteractionApplicationCommand {
 			return
 		}
 
-		if ctx, ok := cmdctx.New(s, i, log, dbQueries); ok {
+		if ctx, ok := cmdctx.New(s, i, log, dbQueries, modLogger); ok {
 			if cmd, exists := commandMap[ctx.Data.Name]; exists {
 				commands.PanicWrapper(cmd, ctx)
 			}
@@ -76,6 +84,7 @@ func main() {
 
 	discordSession.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
 		autoMod.ProcessMessage(s, m)
+		xpManager.ProcessMessage(s, m)
 	})
 
 	//set up discord intents

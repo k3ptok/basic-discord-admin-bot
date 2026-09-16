@@ -79,8 +79,7 @@ func LoadScamDomains(filePath string, logger *slog.Logger) map[string]struct{} {
 }
 
 // Attach rules to automod
-func RegisterRules(am *automod.Manager, store *automod.DomainStore, modLogger *automod.ModLogger) {
-
+func RegisterRules(am *automod.Manager, store *automod.DomainStore) {
 	am.AddRule(func(s *discordgo.Session, m *discordgo.MessageCreate) (bool, string) {
 		words := strings.Fields(m.Content)
 		for _, word := range words {
@@ -105,20 +104,12 @@ func RegisterRules(am *automod.Manager, store *automod.DomainStore, modLogger *a
 
 			// Check map for exact domain match
 			if store.Has(hostname) {
-				_ = s.ChannelMessageDelete(m.ChannelID, m.ID)
-
-				// Log action to log channel
-				modLogger.LogViolation(s, m, "Blacklisted Scam Domain", hostname)
 				return true, "Flagged by scam domain blocklist"
 			}
 
 			// catch brand mimic domains
 			for _, match := range brandLookalikes {
 				if strings.Contains(hostname, match) {
-					_ = s.ChannelMessageDelete(m.ChannelID, m.ID)
-
-					//Log action
-					modLogger.LogViolation(s, m, "Company name impersonation", hostname)
 					return true, "Flagged by domain impersonation check"
 				}
 			}
@@ -128,10 +119,6 @@ func RegisterRules(am *automod.Manager, store *automod.DomainStore, modLogger *a
 				if strings.Contains(hostname, keyword) {
 					for _, tld := range susExtensions {
 						if strings.HasSuffix(hostname, tld) {
-							_ = s.ChannelMessageDelete(m.ChannelID, m.ID)
-
-							//Log action
-							modLogger.LogViolation(s, m, "scam keyword paired with sus domain extension", hostname)
 							return true, "flagged keyword + sus domain extension"
 						}
 					}

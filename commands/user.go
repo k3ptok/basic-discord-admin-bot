@@ -11,17 +11,7 @@ func NewUserCommandStructure() Command {
 		Description: "General user commands",
 		Options: []*discordgo.ApplicationCommandOption{
 			{
-				Type:        discordgo.ApplicationCommandOptionSubCommand,
-				Name:        "info",
-				Description: "Displays user info",
-				Options:	[]*discordgo.ApplicationCommandOption{
-					{
-						Type:			discordgo.ApplicationCommandOptionUser,
-						Name:			"target",
-						Description:	"choose target to grab information",
-						Required:		false,
-					},
-				},
+				
 			},
 		},
 	},

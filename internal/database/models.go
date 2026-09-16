@@ -6,6 +6,7 @@ package database
 
 import (
 	"database/sql"
+	"time"
 )
 
 type GuildSetting struct {
@@ -21,4 +22,12 @@ type ModLog struct {
 	Action    string
 	Reason    sql.NullString
 	CreatedAt sql.NullTime
+}
+
+type ServerLevel struct {
+	GuildID    string
+	UserID     string
+	Xp         int64
+	Level      int64
+	LastXpGain time.Time
 }

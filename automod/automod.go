@@ -2,11 +2,11 @@ package automod
 
 import (
 	"log/slog"
-	//"strings"
+	"strings"
 	"sync"
 	"time"
 	"fmt"
-
+	"unicode"
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -20,14 +20,16 @@ type userHistory struct {
 
 type Manager struct {
 	logger *slog.Logger
+	modLogger *ModLogger
 	rules 	[]Rule
 	mu 		sync.Mutex
 	cache 	map[string]*userHistory
 }
 
-func NewManager(logger *slog.Logger) *Manager {
+func NewManager(logger *slog.Logger, modLogger *ModLogger) *Manager {
 	m := &Manager{
 		logger: logger,
+		modLogger: modLogger,
 		rules:	make([]Rule, 0),
 		cache:	make(map[string]*userHistory),
 	}
@@ -85,7 +87,10 @@ func (m *Manager) isSpamming(msg *discordgo.MessageCreate) bool {
 	recent = append(recent, now)
 	history.timestamps = recent
 
-	isDuplicate := history.lastMessage == msg.Content && msg.Content != ""
+	normLast := normalizeText(history.lastMessage)
+	normCurrent := normalizeText(msg.Content)
+	isDuplicate := normCurrent != "" && isSimilar(normLast, normCurrent)
+
 	history.lastMessage = msg.Content
 
 	return (isDuplicate && len(recent) >= 5) || len(recent) >= 5
@@ -109,6 +114,9 @@ func (m *Manager) applyTimeout(s *discordgo.Session, msg *discordgo.MessageCreat
 }
 
 func (m *Manager) handleViolation(s *discordgo.Session, msg *discordgo.MessageCreate, reason string) {
+	// log violation before it is deleted
+	m.modLogger.LogViolation(s, msg, reason, "N/A")
+
 	//attempt to delete message
 	err := s.ChannelMessageDelete(msg.ChannelID, msg.ID)
 	if err != nil {
@@ -129,6 +137,7 @@ func (m *Manager) handleViolation(s *discordgo.Session, msg *discordgo.MessageCr
 		slog.String("user_name", msg.Author.Username),
 		slog.String("reason", reason))
 
+	
 	//warning message cleanup
 	go func() {
 		time.Sleep(7 * time.Second)
@@ -149,4 +158,57 @@ func (m *Manager) cleanupCache() {
 		m.mu.Unlock()
 	}
 	
+}
+
+// normalizeText strips spaces and converts to lowercase for consistent matching
+func normalizeText(s string) string {
+	var builder strings.Builder
+	for _, r := range s {
+		if !unicode.IsSpace(r) {
+			builder.WriteRune(unicode.ToLower(r))
+		}
+	}
+	return builder.String()
+}
+
+// isSimilar checks if two strings are highly similar (e.g., > 85% match)
+func isSimilar(s1, s2 string) bool {
+	if s1 == s2 {
+		return true
+	}
+	
+	r1, r2 := []rune(s1), []rune(s2)
+	len1, len2 := len(r1), len(r2)
+
+	if len1 == 0 || len2 == 0 {
+		return false
+	}
+
+	// Calculate Levenshtein distance
+	d := make([][]int, len1+1)
+	for i := range d {
+		d[i] = make([]int, len2+1)
+		d[i][0] = i
+	}
+	for j := 0; j <= len2; j++ {
+		d[0][j] = j
+	}
+
+	for i := 1; i <= len1; i++ {
+		for j := 1; j <= len2; j++ {
+			cost := 0
+			if r1[i-1] != r2[j-1] {
+				cost = 1
+			}
+			d[i][j] = min(d[i-1][j]+1, min(d[i][j-1]+1, d[i-1][j-1]+cost))
+		}
+	}
+
+	distance := d[len1][len2]
+	maxLen := max(len1, len2)
+
+	// Calculate similarity percentage (0.0 to 1.0)
+	similarity := 1.0 - (float64(distance) / float64(maxLen))
+
+	return similarity > 0.85
 }

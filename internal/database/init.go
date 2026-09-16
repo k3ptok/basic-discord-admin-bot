@@ -4,12 +4,19 @@ import (
 	"database/sql"
 	"embed"
 	"log/slog"
-
+	"os"
 	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite"
 )
 
 func InitDB(logger *slog.Logger, migrations embed.FS) *sql.DB {
+	//ensure directory exists
+	if err := os.MkdirAll("data", os.ModePerm); err != nil {
+		logger.Error("Failed to create data directory", "error", err)
+		panic(err)
+	}
+
+	// open db connection
 	db, err := sql.Open("sqlite", "data/bot.db?_pragma=journal_mode(wal)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		logger.Error("Failed to open database", "error", err)

@@ -12,7 +12,7 @@ import (
 )
 // Kick a user using slash commands
 func handleKick(ctx *cmdctx.Context) error {
-	// 1. Extract required target user
+	// extract required target user
 	target, ok := ctx.GetUser("target")
 	if !ok {
 		return ctx.Respond("❌ You must specify a target user to kick.")
@@ -23,46 +23,51 @@ func handleKick(ctx *cmdctx.Context) error {
 		return ctx.Respond("❌ You cannot kick yourself.")
 	}
 
-	// 2. Extract optional reason (default to fallback if empty)
+	// Extract optional reason (default to fallback if empty)
 	reason, ok := ctx.GetString("reason")
 	if !ok || reason == "" {
 		reason = "No reason provided."
 	}
 
-	// Construct full audit log message showing who initiated the action
-	auditReason := fmt.Sprintf("Kicked by %s: %s", ctx.Interaction.Member.User.Username, reason)
+	// Attempt to DM BEFORE kicking
+	userChannel, err := ctx.Session.UserChannelCreate(target.ID)
+	dmStatus := "✅ User was notified via DM."
 
-	// 3. Perform Discord API Kick Action
-	err := ctx.Session.GuildMemberDeleteWithReason(
-		ctx.Interaction.GuildID,
-		target.ID,
-		auditReason,
-	)
 	if err != nil {
-		ctx.Logger.Error("Failed to kick member",
-			slog.String("target_id", target.ID),
-			slog.Any("error", err),
-		)
-		return ctx.Respond(fmt.Sprintf("❌ Failed to kick **%s**: `%s`", target.Username, err.Error()))
+		dmStatus = "⚠️ Could not open DM with user."
+	} else {
+		dmMsg := fmt.Sprintf("👢 You have been kicked from the server.\n**Reason:** %s", reason)
+		_, err := ctx.Session.ChannelMessageSend(userChannel.ID, dmMsg)
+		if err != nil {
+			dmStatus = "⚠️ Could not DM user (server DMs disabled)."
+		}
 	}
 
-	ctx.Logger.Info("Member kicked successfully",
-		slog.String("target_id", target.ID),
-		slog.String("moderator_id", ctx.Interaction.Member.User.ID),
-		slog.String("reason", reason),
-	)
+	// execute the Kick in Discord
+	err = ctx.Session.GuildMemberDeleteWithReason(ctx.Interaction.GuildID, target.ID, reason)
+	if err != nil {
+		ctx.Logger.Error("Failed to kick user", slog.Any("error", err))
+		return ctx.RespondEphemeral("❌ Failed to kick the user. Check my permissions and role hierarchy.")
+	}
 
-	// 4. Return formatted response
+	err = ctx.DB.InsertModLog(context.Background(), database.InsertModLogParams{
+		GuildID:	ctx.Interaction.GuildID,
+		UserID:		target.ID,
+		Action:		"KICK",
+		Reason:		sql.NullString{String: reason, Valid: true},
+	})
+	if err != nil {
+		ctx.Logger.Error("Failed to log mod event to db", slog.Any("error", err))
+		return ctx.RespondEphemeral("Failed to log mod event to db")
+	}
+
+	// Respond ephemerally to the admin
 	embed := &discordgo.MessageEmbed{
-		Title:       "🔨 Member Kicked",
-		Color:       0xE74C3C, // Red
-		Description: fmt.Sprintf("**Target:** %s (`%s`)\n**Reason:** %s", target.Mention(), target.ID, reason),
-		Footer: &discordgo.MessageEmbedFooter{
-			Text: fmt.Sprintf("Actioned by %s", ctx.Interaction.Member.User.Username),
-		},
+		Title:       "👢 User Kicked",
+		Color:       0xE67E22,
+		Description: fmt.Sprintf("**Target:** %s (`%s`)\n**Reason:** %s\n\n*%s*", target.Mention(), target.ID, reason, dmStatus),
 	}
-
-	return ctx.RespondEmbed(embed)
+	return ctx.RespondEmbedEphemeral(embed)
 }
 
 func handleTimeout(ctx *cmdctx.Context) error {
@@ -118,13 +123,13 @@ func handleTimeout(ctx *cmdctx.Context) error {
 		Color:       0xE67E22, // Orange
 		Description: fmt.Sprintf("**Target:** %s (`%s`)\n**Duration:** %s\n**Reason:** %s", target.Mention(), target.ID, durationStr, reason),
 	}
-	return ctx.RespondEmbed(embed)
+	return ctx.RespondEmbedEphemeral(embed)
 }
 
 func handleBan(ctx *cmdctx.Context) error {
 	target, ok := ctx.GetUser("user")
 	if !ok || target == nil {
-		return ctx.Respond("Must specify a target")
+		return ctx.RespondEphemeral("Must specify a target")
 	}
 
 	reason, ok := ctx.GetString("reason")
@@ -132,13 +137,28 @@ func handleBan(ctx *cmdctx.Context) error {
 		reason = "No reason provided"
 	}
 
-	//execute ban
-	err := ctx.Session.GuildBanCreateWithReason(ctx.Interaction.GuildID, target.ID, reason, 0)
+	// open dm with target
+	userChannel, err := ctx.Session.UserChannelCreate(target.ID)
+	dmStatus := "✅ User was notified via DM."
+
 	if err != nil {
-		ctx.Logger.Error("Failed to ban user", slog.Any("error", err))
-		return ctx.Respond("Failed to ban users. Check logs for more info")
+		dmStatus = "⚠️ Could not open DM with user."
+	} else {
+		dmMsg := fmt.Sprintf("🔨 You have been banned from the server.\n**Reason:** %s", reason)
+		_, err := ctx.Session.ChannelMessageSend(userChannel.ID, dmMsg)
+		if err != nil {
+			dmStatus = "⚠️ Could not DM user (server DMs disabled)."
+		}
 	}
 
+	// execute ban
+	err = ctx.Session.GuildBanCreateWithReason(ctx.Interaction.GuildID, target.ID, reason, 0)
+	if err != nil {
+		ctx.Logger.Error("Failed to ban user", slog.Any("error", err))
+		return ctx.RespondEphemeral("❌ Failed to ban the user. Check my permissions and role hierarchy.")
+	}
+
+	// log mod event in db
 	err = ctx.DB.InsertModLog(context.Background(),database.InsertModLogParams{
 		GuildID:	ctx.Interaction.GuildID,
 		UserID: 	target.ID,
@@ -152,15 +172,15 @@ func handleBan(ctx *cmdctx.Context) error {
 	embed := &discordgo.MessageEmbed{
 		Title:       "🔨 User Banned",
 		Color:       0xE74C3C, // Red
-		Description: fmt.Sprintf("**Target:** %s (`%s`)\n**Reason:** %s", target.Mention(), target.ID, reason),
+		Description: fmt.Sprintf("**Target:** %s (`%s`)\n**Reason:** %s\n\n*%s*", target.Mention(), target.ID, reason, dmStatus),
 	}
-	return ctx.RespondEmbed(embed)
+	return ctx.RespondEmbedEphemeral(embed)
 }
 
 func handleUnban(ctx *cmdctx.Context) error {
 	target, ok := ctx.GetUser("user")
 	if !ok || target == nil {
-		return ctx.Respond("Must provide valid user ID to unban")
+		return ctx.RespondEphemeral("Must provide valid user ID to unban")
 	}
 
 	reason, ok := ctx.GetString("reason")
@@ -172,7 +192,7 @@ func handleUnban(ctx *cmdctx.Context) error {
 	err := ctx.Session.GuildBanDelete(ctx.Interaction.GuildID, target.ID)
 	if err != nil {
 		ctx.Logger.Error("Failed to unban user", slog.Any("error", err))
-		return ctx.Respond("Failed to unban target. Check logs for info")
+		return ctx.RespondEphemeral("Failed to unban target. Check logs for info")
 	}
 
 	//Log to db
@@ -191,14 +211,15 @@ func handleUnban(ctx *cmdctx.Context) error {
 		Color:       0x2ECC71, // Green
 		Description: fmt.Sprintf("**Target ID:** `%s`\n**Reason:** %s", target.ID, reason),
 	}
-	return ctx.RespondEmbed(embed)
+	return ctx.RespondEmbedEphemeral(embed)
 
 }
 
+//Purge target users chat history within the scan limit entered
 func handlePurgeUser(ctx *cmdctx.Context) error {
 	target, ok := ctx.GetUser("user")
 	if !ok || target == nil {
-		return ctx.Respond("Must specify a target")
+		return ctx.RespondEphemeral("Must specify a target")
 	}
 
 	// determine how far back to scan
@@ -215,7 +236,7 @@ func handlePurgeUser(ctx *cmdctx.Context) error {
 	messages, err := ctx.Session.ChannelMessages(ctx.Interaction.ChannelID, scanLimit, "", "", "")
 	if err != nil {
 		ctx.Logger.Error("Failed to fetch channel messages", slog.Any("error", err))
-		return ctx.Respond("Failed to fetch channel history")
+		return ctx.RespondEphemeral("Failed to fetch channel history")
 	}
 
 	// filter collected messages for target user and messages younger than 14 days
@@ -231,7 +252,7 @@ func handlePurgeUser(ctx *cmdctx.Context) error {
 	}
 
 	if len(messageIDs) == 0 {
-		return ctx.Respond(fmt.Sprintf("⚠️ Found no recent deletable messages from %s in the last %d messages scanned.", target.Mention(), scanLimit))
+		return ctx.RespondEphemeral(fmt.Sprintf("⚠️ Found no recent deletable messages from %s in the last %d messages scanned.", target.Mention(), scanLimit))
 	}
 
 	if len(messageIDs) == 1 {
@@ -244,10 +265,10 @@ func handlePurgeUser(ctx *cmdctx.Context) error {
 
 	if err != nil {
 		ctx.Logger.Error("Failed to delete messages", slog.Any("error", err))
-		return ctx.Respond("❌ Failed to delete messages.")
+		return ctx.RespondEphemeral("❌ Failed to delete messages.")
 	}
 	
-	return ctx.Respond(fmt.Sprintf("🧹 Successfully scrubbed **%d** messages from %s.", len(messageIDs), target.Mention()))
+	return ctx.RespondEphemeral(fmt.Sprintf("🧹 Successfully scrubbed **%d** messages from %s.", len(messageIDs), target.Mention()))
 }
 
 // Issue a logged warning to user
@@ -255,12 +276,12 @@ func handleWarn(ctx *cmdctx.Context) error {
 	// Get target user
 	target, ok := ctx.GetUser("user")
 	if !ok || target == nil {
-		return ctx.Respond("❌ You must specify a target user to warn.")
+		return ctx.RespondEphemeral("❌ You must specify a target user to warn.")
 	}
 	//Get entered reason
 	reason, ok := ctx.GetString("reason")
 	if !ok || reason == "" {
-		return ctx.Respond("❌ A reason is required for a formal warning.")
+		return ctx.RespondEphemeral("❌ A reason is required for a formal warning.")
 	}
 	// Save warning to database
 	err := ctx.DB.InsertModLog(context.Background(), database.InsertModLogParams{
@@ -271,25 +292,43 @@ func handleWarn(ctx *cmdctx.Context) error {
 	})
 	if err != nil {
 		ctx.Logger.Error("Failed to save warning to database", slog.Any("error", err))
-		return ctx.Respond("❌ An internal error occurred while saving the warning.")
+		return ctx.RespondEphemeral("❌ An internal error occurred while saving the warning.")
 	}
 
-	//Build response to send in chat
+	//attempt to dm user
+	userChannel, err := ctx.Session.UserChannelCreate(target.ID)
+	dmStatus := "✅ User was notified via DM."
+
+	if err != nil {
+		// If we can't open a channel, they likely have the bot blocked
+		dmStatus = "⚠️ Could not DM user (they may have DMs disabled)."
+	} else {
+		// send the warning to their dms
+		dmMsg := fmt.Sprintf("⚠️ You have received a warning in the server.\n**Reason:** %s", reason)
+		_, err := ctx.Session.ChannelMessageSend(userChannel.ID, dmMsg)
+		
+		if err != nil {
+			// Sometimes opening the channel works, but sending fails due to privacy settings
+			dmStatus = "⚠️ Could not DM user (they may have server DMs disabled)."
+		}
+	}
+
+	// create message embed
 	embed := &discordgo.MessageEmbed{
 		Title:       "⚠️ User Warned",
-		Color:       0xF1C40F, // Yellow
-		Description: fmt.Sprintf("**Target:** %s (`%s`)\n**Reason:** %s", target.Mention(), target.ID, reason),
-		Footer: &discordgo.MessageEmbedFooter{
-			Text: fmt.Sprintf("Warned by %s", ctx.Interaction.Member.User.Username),
-		},
+		Color:       0xF1C40F,
+		Description: fmt.Sprintf("**Target:** %s\n**Reason:** %s\n\n*%s*", target.Mention(), reason, dmStatus),
 	}
-	return ctx.RespondEmbed(embed)
+
+	return ctx.RespondEmbedEphemeral(embed)
+
+
 }
 
 func handleHistory(ctx *cmdctx.Context) error {
 	target, ok := ctx.GetUser("user")
 	if !ok || target == nil {
-		return ctx.Respond("❌ You must specify a target user.")
+		return ctx.RespondEphemeral("❌ You must specify a target user.")
 	}
 
 	logs, err := ctx.DB.GetUserModLogs(context.Background(), database.GetUserModLogsParams{
@@ -298,10 +337,10 @@ func handleHistory(ctx *cmdctx.Context) error {
 	})
 	if err != nil {
 		ctx.Logger.Error("Failed to retrieve users moderation history", slog.Any("error", err))
-		return ctx.Respond("❌ An internal error occurred while fetching history.")
+		return ctx.RespondEphemeral("❌ An internal error occurred while fetching history.")
 	}
 	if len(logs) == 0 {
-		return ctx.Respond(fmt.Sprintf("✅ **%s** has no moderation history.", target.Username))
+		return ctx.RespondEphemeral(fmt.Sprintf("✅ **%s** has no moderation history.", target.Username))
 	}
 	embed := &discordgo.MessageEmbed{
 		Title:       fmt.Sprintf("📜 Infraction History: %s", target.Username),
@@ -323,7 +362,63 @@ func handleHistory(ctx *cmdctx.Context) error {
 			Inline: false,
 		})
 	}
-	return ctx.RespondEmbed(embed)
+	return ctx.RespondEmbedEphemeral(embed)
+}
+
+func handleWhois(ctx *cmdctx.Context) error {
+	target, ok := ctx.GetUser("user")
+	if !ok || target == nil {
+		return ctx.RespondEphemeral("Must specify a target")
+	}
+
+	member, err := ctx.Session.GuildMember(ctx.Interaction.GuildID, target.ID)
+	if err != nil {
+		ctx.Logger.Error("Failed to retrieve member data", slog.Any("error", err))
+		return ctx.RespondEphemeral("Failed to retrieve member data")
+	}
+
+	// pull account creation data from snowflake
+	accountCreated, err := discordgo.SnowflakeTimestamp(target.ID)
+	createdStr := "Unknown"
+	if err == nil {
+		createdStr = accountCreated.Format("Jan 02, 2006 • 15:04 MST")
+	}
+
+	// format
+	joinedStr := member.JoinedAt.Format("Jan 02, 2006 • 15:04 MST")
+
+	
+	embed := &discordgo.MessageEmbed{
+		Title:       fmt.Sprintf("🔍 Whois: %s", target.Username),
+		Color:       0x9B59B6, // Purple
+		Thumbnail: &discordgo.MessageEmbedThumbnail{
+			URL: target.AvatarURL(""),
+		},
+		Fields: []*discordgo.MessageEmbedField{
+			{
+				Name:   "ID",
+				Value:  fmt.Sprintf("`%s`", target.ID),
+				Inline: true,
+			},
+			{
+				Name:   "Mention",
+				Value:  target.Mention(),
+				Inline: true,
+			},
+			{
+				Name:   "Account Created",
+				Value:  createdStr,
+				Inline: false,
+			},
+			{
+				Name:   "Joined Server",
+				Value:  joinedStr,
+				Inline: false,
+			},
+		},
+	}
+
+	return ctx.RespondEmbedEphemeral(embed)
 }
 
 // MakeLogChannelHandler returns a SubCommandHandler closure linked to your ModLogger
@@ -332,7 +427,7 @@ func MakeLogChannelHandler() SubCommandHandler {
 		// Extract the "target" channel option from command context
 		channel, ok := ctx.GetChannel("target")
 		if !ok || channel == nil {
-			return ctx.Respond("❌ Invalid channel selected.")
+			return ctx.RespondEphemeral("❌ Invalid channel selected.")
 		}
 
 		err := ctx.DB.SetLogChannel(context.Background(), database.SetLogChannelParams{
@@ -341,9 +436,11 @@ func MakeLogChannelHandler() SubCommandHandler {
 		})
 		if err != nil {
 			ctx.Logger.Error("Failed to save log channel to database", slog.Any("error", err))
-			return ctx.Respond("❌ Failed to save configuration to the database.")
+			return ctx.RespondEphemeral("❌ Failed to save configuration to the database.")
 		}
-		return ctx.Respond(fmt.Sprintf("✅ AutoMod violation alerts will now be sent to <#%s>.", channel.ID))
+
+		ctx.ModLogger.ClearCache(ctx.Interaction.GuildID)
+		return ctx.RespondEphemeral(fmt.Sprintf("✅ AutoMod violation alerts will now be sent to <#%s>.", channel.ID))
 	}
 	
 }

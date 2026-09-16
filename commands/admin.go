@@ -169,6 +169,19 @@ func NewAdminCommandStructure() Command {
 						},
 					},
 				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "whois",
+					Description: "View detailed account information about a user",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionUser,
+							Name:        "user",
+							Description: "The user to investigate",
+							Required:    true,
+						},
+					},
+				},
 			},
 		},
 		SubCommands: map[string]SubCommandHandler{
@@ -179,7 +192,8 @@ func NewAdminCommandStructure() Command {
 			"log-channel": RequirePermissions(discordgo.PermissionAdministrator, MakeLogChannelHandler()),
 			"warn": RequirePermissions(discordgo.PermissionKickMembers, handleWarn),
 			"history": RequirePermissions(discordgo.PermissionKickMembers, handleHistory),
-			"user-purge": RequirePermissions(discordgo.PermissionManageMessages, handlePurgeUser),
+			"purge-user": RequirePermissions(discordgo.PermissionManageMessages, handlePurgeUser),
+			"whois": RequirePermissions(discordgo.PermissionKickMembers, handleWhois),
 		},
 	}
 }

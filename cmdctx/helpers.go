@@ -26,6 +26,28 @@ func (c *Context) RespondEmbed(embed *discordgo.MessageEmbed) error {
 	})
 }
 
+// RespondEphemeral sends a text response that only the executor can see
+func (ctx *Context) RespondEphemeral(content string) error {
+	return ctx.Session.InteractionRespond(ctx.Interaction.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: content,
+			Flags:   discordgo.MessageFlagsEphemeral, // <-- This is the magic flag!
+		},
+	})
+}
+
+// RespondEmbedEphemeral sends an embed response that only the executor can see
+func (ctx *Context) RespondEmbedEphemeral(embed *discordgo.MessageEmbed) error {
+	return ctx.Session.InteractionRespond(ctx.Interaction.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+			Flags:  discordgo.MessageFlagsEphemeral, 
+		},
+	})
+}
+
 // Defer informs Discord that the bot is processing (prevents 3s interaction timeout)
 func (c *Context) Defer(ephemeral bool) error {
 	var flags discordgo.MessageFlags
