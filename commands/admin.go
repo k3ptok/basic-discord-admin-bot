@@ -13,6 +13,11 @@ func NewAdminCommandStructure() Command {
 			Description:              "Administration Commands",
 			DefaultMemberPermissions: &adminPerms,
 			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "help",
+					Description: "View the moderation command cheat sheet",
+				},
 				{	//New command under /admin
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "kick",
@@ -194,6 +199,7 @@ func NewAdminCommandStructure() Command {
 			"history": RequirePermissions(discordgo.PermissionKickMembers, handleHistory),
 			"purge-user": RequirePermissions(discordgo.PermissionManageMessages, handlePurgeUser),
 			"whois": RequirePermissions(discordgo.PermissionKickMembers, handleWhois),
+			"help": RequirePermissions(discordgo.PermissionAdministrator, handleAdminHelp),
 		},
 	}
 }

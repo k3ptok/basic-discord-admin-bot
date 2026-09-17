@@ -59,7 +59,10 @@ func main() {
 		commands.NewAdminCommandStructure(),
 		//commands.NewUserCommandStructure(),
 		commands.NewPingCommand(),
-		commands.NewTagCommand(), 
+		commands.NewTagCommand(),
+		commands.NewRankCommand(),
+		commands.NewLeaderboardCommand(),
+		commands.NewHelpCommand(),
 	}
 
 	commandMap := make(map[string]commands.Command)

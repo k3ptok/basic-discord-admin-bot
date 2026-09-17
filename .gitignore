@@ -14,3 +14,5 @@ dist/
 *.dylib
 *.test
 *.out
+data/
+

@@ -444,3 +444,31 @@ func MakeLogChannelHandler() SubCommandHandler {
 	}
 	
 }
+
+func handleAdminHelp(ctx *cmdctx.Context) error {
+	embed := &discordgo.MessageEmbed{
+		Title:       "🛡️ Admin & Moderation Cheat Sheet",
+		Description: "All moderation commands are logged to the database. AutoMod is actively scanning for scam links and brand impersonations.",
+		Color:       0xE74C3C, // Red for Admin
+		Fields: []*discordgo.MessageEmbedField{
+			{
+				Name:   "🛑 Disciplinary Actions",
+				Value:  "`/admin warn <user> <reason>` - Issues a formal warning via DM.\n`/admin timeout <user> <duration> [reason]` - Mutes a user (e.g., '1h', '30m').\n`/admin kick <user> [reason]` - Removes user from the server.\n`/admin ban <user> [reason]` - Permanently bans user.\n`/admin unban <user_id>` - Revokes a ban.",
+				Inline: false,
+			},
+			{
+				Name:   "🧹 Cleanup & Utility",
+				Value:  "`/admin purge-user <user> [scan-limit]` - Deletes recent messages by a specific spammer.\n`/admin log-channel <channel>` - Sets where AutoMod sends alerts.",
+				Inline: false,
+			},
+			{
+				Name:   "🔍 Investigations",
+				Value:  "`/admin whois <user>` - Shows account creation and join dates.\n`/admin history <user>` - Pulls previous database infractions for a user.",
+				Inline: false,
+			},
+		},
+	}
+
+	// ALWAYS ephemeral so mods don't expose their tools in general chat
+	return ctx.RespondEmbedEphemeral(embed)
+}

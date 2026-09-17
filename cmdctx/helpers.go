@@ -62,6 +62,13 @@ func (c *Context) Defer(ephemeral bool) error {
 	})
 }
 
+func (c *Context) EditFollowupEmbed(embed *discordgo.MessageEmbed) error {
+	_, err := c.Session.InteractionResponseEdit(c.Interaction.Interaction, &discordgo.WebhookEdit{
+		Embeds: &[]*discordgo.MessageEmbed{embed},
+	})
+	return err
+}
+
 // EditFollowup updates a deferred response message
 func (c *Context) EditFollowup(content string) error {
 	_, err := c.Session.InteractionResponseEdit(c.Interaction.Interaction, &discordgo.WebhookEdit{

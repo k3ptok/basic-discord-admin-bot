@@ -21,3 +21,13 @@ func NewRankCommand() Command {
 		Action: HandleRank,
 	}
 }
+
+func NewLeaderboardCommand() Command {
+	return Command{
+		Definition: &discordgo.ApplicationCommand{
+			Name:        "leaderboard",
+			Description: "View the top 10 most active members in the server",
+		},
+		Action: HandleLeaderboard,
+	}
+}
